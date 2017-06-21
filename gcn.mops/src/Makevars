@@ -1,0 +1,106 @@
+# NOTE: macros which are not defined here are inherited 
+# from /etc/R/Makeconf as I am trying to make it short
+# Macros eding in '_UD' indicate 'User-Defined'
+
+# compiler with debug code
+#DBG = -DDEBUG
+################ SOURCES & OBJECTS ################
+ALL_SRCS := $(shell find . -type f -name '*.c' -o -name '*.cu' -o -name '*.cpp')
+
+CUDA_SRCS = $(filter %.cu,$(ALL_SRCS))
+CUDA_OBJS = $(patsubst %.cu, %.o,$(CUDA_SRCS))
+# In case a device kernel calls another kernel in another .cu file
+CUDA_DLINK_OBJ = cu_DevicLinked.o
+
+CPP_SRCS = $(filter %.cpp,$(ALL_SRCS))
+CPP_OBJS = $(patsubst %.cpp, %.o, $(CPP_SRCS))
+
+C_SRCS = $(filter %.c,$(ALL_SRCS))
+C_OBJS = $(patsubst %.c, %.o, $(C_SRCS))
+
+OBJECTS = $(C_OBJS) $(CPP_OBJS) $(CUDA_OBJS) $(CUDA_DLINK_OBJ)
+
+
+################ PATHS ################
+CUDA_HOME = /usr/local/cuda
+CUDA_LIB_DIR = $(CUDA_HOME)/lib64
+
+# R_HOME is already defined in /etc/R/Makeconf as 'R_HOME = /usr/share/R'
+
+
+################ INCLUDE DIRECTORIES ################
+CUDA_INCLUDE_DIR = $(CUDA_HOME)/include
+# R_INCLUDE_DIR R library directory is also defined by R
+
+
+################ COMPILERS ################
+CXX	 = g++
+CC	 = gcc
+NVCC = $(CUDA_HOME)/bin/nvcc
+
+
+################ COMPILER FLAGS ################
+# Flags specific for the package passed to the g++ compiler directly
+PKG_CXXFLAGS += $(DBG)
+PKG_CXXFLAGS += -I$(CUDA_INCLUDE_DIR)
+PKG_CXXFLAGS += -DMAX_DRAM=1792 #MB.. definition without a value sets it to 1 MB. Comment it to use max DRAM
+#TODO: they should be calculated in the program, dynamically, or set here according to "GPU_CARD" variable in this Makevar file
+PKG_CXXFLAGS += -DBLOCK_SIZE=512
+PKG_CXXFLAGS += -DGRID_SIZE=112
+#PKG_CXXFLAGS += -otherflags
+
+PKG_CFLAGS = $(PKG_CXXFLAGS)
+# Flags for the host code compiler (ie gcc) which are passed by nvcc.
+# If CUDA 7.5 with gcc-4.8 is used, then we need to override the R-inherited macro 'CXXFLAGS' since it
+# has the flags '-fstack-protector-strong' and '-Wdate-time' which are not supported by gcc-4.8. gcc
+# 4.8 will generate error if nvcc tries to pass CXXFLAGS to gcc via the '-Xcompiler' flag.
+# NOTE: CFLAGS and CXXFLAGS macros are defined by R build environment and if we redefine them here, the
+# re-definition here will be overriden by whatever defined in R build environment (hence '_UD')
+# If security is not desired, remove '-fstack-protector-all'
+#CXXFLAGS_UD	+=	-g -O2 -fstack-protector-all -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -g $(LTO)
+# For CUDA 8.0, gcc-5.4 is supported and hence we can pass all the flags directly to gcc via nvcc
+CXXFLAGS_UD += $(CXXFLAGS)
+CXXFLAGS_UD	+= $(CXXPICFLAGS)
+CXXFLAGS_UD	+= $(DBG)
+#CXXFLAGS_UD += -otherflags
+
+GPU_CARD	:=	-arch=sm_20
+NVCCFLAGS	+=	-D_FORCE_INLINES
+#NVCCFLAGS	+=	--fmad=true
+#NVCCFLAGS	+=	-ftz=true
+#NVCCFLAGS	+=  -use_fast_math
+NVCCFLAGS	+=	-Xptxas -v
+# remove '-DUSE_CONST_MEM' to let program use global memory instead of
+# constant memory for storing cn.MOPS arguments and pre-computed constants.
+NVCCFLAGS 	+= -DUSE_CONST_MEM
+NVCCFLAGS 	+= -DMAX_nSAMPLES=100
+NVCCFLAGS 	+= -DMAX_nCLASSES=100
+#NVCCFLAGS	+=	-Xptxas -O0
+NVCCFLAGS	+=	-Xptxas -dlcm=cg
+
+################ LINKED LIBRARIES ################
+# needed by R build environment for the final linking stage
+CUDA_LIBS += -lcudart -d
+#CUDA_LIBS += -lcudadevrt -d
+# This defines what the shared object libraries will be. This macro
+# is read after 'R CMD INSTALL' at the linking stage of the build.
+PKG_LIBS= -L$(CUDA_LIB_DIR) -Wl,-rpath=$(CUDA_LIB_DIR) $(CUDA_LIBS)
+
+################ COMPILATION RULES ################
+# this way of compilation is wrong.. device link is done twice, but I am doing this to circumvent R's restriction on how many targets should be there.
+# It seems that if I have a separate rule for -dlink, R's build environment skips building the C++ and non-CUDA sources
+%.o: %.cu $(CUDA_SRCS)
+	$(NVCC) -Xcompiler "$(CXXFLAGS_UD)" \
+		$(GPU_CARD) \
+		$(NVCCFLAGS) \
+		--relocatable-device-code=true --compile $< \
+		--output-file $@ \
+		-I$(CUDA_INCLUDE_DIR) \
+		-I$(R_INCLUDE_DIR)
+	$(NVCC) -Xcompiler "$(CXXFLAGS_UD)" \
+		$(GPU_CARD) \
+		$(NVCCFLAGS) \
+		--device-link $(CUDA_OBJS) \
+		--output-file $(CUDA_DLINK_OBJ) \
+		
+

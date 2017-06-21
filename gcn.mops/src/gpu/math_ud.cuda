@@ -1,0 +1,118 @@
+#include "dbldbl.h"
+
+__device__ void bubsort_inPlace(double *arr, unsigned int len, unsigned int stride) {
+   
+   int i, j; double tmp;
+   for (i = 1; i < len; i++) {
+      for (j = 0; j < (len - i)*stride; j+=stride) {
+         if (arr[j] > arr[j + stride]) {
+            tmp = arr[j];
+            arr[j] = arr[j + stride];
+            arr[j + stride] = tmp;
+         }
+      }
+   }
+}
+
+__host__ __device__ void set_arrVal(double *arr, unsigned int nElements, unsigned int stride, double constant) {
+	
+	unsigned int i;
+	for(i = 0; i < nElements*stride; i+=stride)
+		arr[i] = constant;
+}
+
+__device__ double median_ud(double* sorted_data, unsigned int len, unsigned int stride){
+
+	double result;
+
+	bool isOdd_len = (len & 1 == 0)?false:true;
+
+	if(isOdd_len == true)
+		result = sorted_data[(len/2)*stride];
+	else
+		result = (sorted_data[(len/2)*stride] + sorted_data[((len/2)-1)*stride]) / 2.0;
+
+	return result;
+}
+
+__device__ double mean_ud(double* data, unsigned int len, unsigned int stride){
+	
+	dbldbl result = make_dbldbl(0.0, 0.0);
+	dbldbl dd_data = make_dbldbl(0.0, 0.0);;
+	
+	
+	unsigned int i;
+	for(i = 0; i < len*stride; i+=stride) {
+		dd_data.y = data[i];
+		result = add_dbldbl(dd_data, result);
+	}
+	
+	dbldbl dd_len = make_dbldbl((double)len, 0.0);
+	result = div_dbldbl(result, dd_len);
+
+	dbldbl dd_t = make_dbldbl(0.0, 0.0);
+	for (i = 0; i < len*stride; i+=stride) {
+		dd_data.y = data[i];
+		dd_t = add_dbldbl(dd_t, sub_dbldbl(dd_data, result));
+	}
+	
+	result = add_dbldbl( result, div_dbldbl(dd_t, dd_len));
+	
+	return get_dbldbl_head(result) + get_dbldbl_tail(result);
+}	
+
+/*
+__device__ double sum(double *data, unsigned int len) {
+	
+	double result = 0;
+	
+	unsigned int i;
+	for(i=0; i < len; i++)
+		result += data[i];
+	
+	return result;
+}
+*/
+
+__device__ unsigned int get_idxOfMax_col(double *col, unsigned int len, unsigned int stride) {
+
+	unsigned int i_max = 0;
+	
+	unsigned int i;
+/*
+	for(i = 1; i < len; i++)
+		if(col[i*stride]>col[i_max])
+			i_max = i*stride;
+	
+	return i_max/stride;
+*/
+	for(i = stride; i < len*stride; i+=stride)
+		if(col[i]>col[i_max])
+			i_max = i;
+	
+	return i_max/stride;
+}
+
+__device__ void mul_const_vec(double *vec, unsigned int len, double constant, double *result, unsigned int res_stride) {
+	
+	unsigned int i;
+	for(i = 0; i < len; i++)
+		result[i*res_stride] = vec[i]*constant;
+
+}
+
+__device__ void mat_mul_R(double *a, unsigned int a_nrows, unsigned int a_ncols, unsigned int a_stride,
+						  double *b, unsigned int b_nrows, unsigned int b_ncols, unsigned int b_stride,
+						  double *result, unsigned int res_stride) {
+	
+	int r_a, c_b, rc_ab;
+	for(c_b = 0; c_b < b_ncols; c_b++) {
+		for(r_a = 0; r_a < a_nrows; r_a++) {
+			result[(c_b*a_nrows + r_a)*res_stride] = 0;
+			for(rc_ab = 0; rc_ab < a_ncols; rc_ab++){ // or  < b_nrows
+				result[(c_b*a_nrows + r_a)*res_stride] += a[(a_nrows*rc_ab + r_a)*a_stride] * b[(rc_ab + b_nrows*c_b)*b_stride];
+			}
+		}
+	}
+
+}

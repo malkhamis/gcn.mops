@@ -1,0 +1,28 @@
+Package: gcn.mops
+Maintainer: Mohammad Alkhamis <malkhamis@protonmail.com>
+Author: Guenter Klambauer (cn.mops), Mohammad Alkhamis (gcn.mops, i.e. GPU-based implementation)
+License: LGPL (>= 2.0)
+Type: Package
+Title: gcn.MOPS: Accelerating cn.MOPS with GPU
+Description: cn.MOPS is a model-based algorithm used to quantitatively 
+    detect copy-number variations in next-generation, DNA-sequencing 
+    data. The algorithm is implemented as an R package and can speed up 
+    processing with multi-CPU parallelism. However, the maximum achievable 
+    speedup is limited by the overhead of multi-CPU parallelism, which 
+    increases with the number of CPU cores used. In this package, an 
+    alternative mechanism of process acceleration is implemented which
+    utilizes nVidia GPU.
+Version: 1.18.0
+Date: 2017-06-20
+URL: http://hdl.handle.net/1828/8286
+Depends: R (>= 2.12), methods, utils, stats, graphics, parallel,
+        GenomicRanges
+Imports: BiocGenerics, Biobase, IRanges, Rsamtools, GenomeInfoDb,
+        S4Vectors
+Suggests: DNAcopy
+LazyLoad: yes
+biocViews: Sequencing, CopyNumberVariation, Homo_sapiens, CellBiology,
+        HapMap, Genetics
+RoxygenNote: 5.0.1
+NeedsCompilation: yes
+Packaged: 
